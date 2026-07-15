@@ -78,129 +78,6 @@
       .price-row{grid-template-columns:1fr 1fr;}
     }
   </style>
-
-<script>
-(function(){
-  const DB_NAME = 'PflanzenLogDB';
-  const DB_VERSION = 1;
-  const STORE = 'appState';
-  const STATE_KEY_CANDIDATES = ['pflanzenlog_state','pflanzenlog','appState','state'];
-  const META_KEY = 'pflanzenlog_idb_migrated';
-
-  function openDb(){
-    return new Promise((resolve,reject)=>{
-      const req = indexedDB.open(DB_NAME, DB_VERSION);
-      req.onupgradeneeded = (e)=>{
-        const db = req.result;
-        if(!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
-      };
-      req.onsuccess = ()=>resolve(req.result);
-      req.onerror = ()=>reject(req.error);
-    });
-  }
-
-  async function idbGet(key){
-    const db = await openDb();
-    return new Promise((resolve,reject)=>{
-      const tx = db.transaction(STORE,'readonly');
-      const os = tx.objectStore(STORE);
-      const req = os.get(key);
-      req.onsuccess = ()=>resolve(req.result);
-      req.onerror = ()=>reject(req.error);
-    });
-  }
-
-  async function idbSet(key,val){
-    const db = await openDb();
-    return new Promise((resolve,reject)=>{
-      const tx = db.transaction(STORE,'readwrite');
-      const os = tx.objectStore(STORE);
-      os.put(val,key);
-      tx.oncomplete = ()=>resolve();
-      tx.onerror = ()=>reject(tx.error);
-    });
-  }
-
-  function tryParse(v){
-    if(!v) return null;
-    try { return JSON.parse(v); } catch(e){ return null; }
-  }
-
-  function findLegacyState(){
-    for(const k of STATE_KEY_CANDIDATES){
-      const parsed = tryParse(localStorage.getItem(k));
-      if(parsed && typeof parsed === 'object') return {key:k, state:parsed};
-    }
-    return null;
-  }
-
-  function looksLikeAppState(obj){
-    return !!obj && typeof obj === 'object' && (
-      Array.isArray(obj.arten) || Array.isArray(obj.bestand) || Array.isArray(obj.logs) || Array.isArray(obj.verkauf)
-    );
-  }
-
-  function mergeDefaults(state){
-    const s = (state && typeof state === 'object') ? state : {};
-    if(!Array.isArray(s.arten)) s.arten = [];
-    if(!Array.isArray(s.bestand)) s.bestand = [];
-    if(!Array.isArray(s.logs)) s.logs = [];
-    if(!Array.isArray(s.verkauf)) s.verkauf = [];
-    if(!Array.isArray(s.soldHistory)) s.soldHistory = [];
-    if(!s.settings || typeof s.settings !== 'object') s.settings = {};
-    return s;
-  }
-
-  async function bootstrapState(){
-    const existing = await idbGet('state');
-    if(looksLikeAppState(existing)){
-      window.__PLANTENLOG_BOOTSTRAP_STATE__ = mergeDefaults(existing);
-      return;
-    }
-    const legacy = findLegacyState();
-    if(legacy && looksLikeAppState(legacy.state)){
-      const migrated = mergeDefaults(legacy.state);
-      await idbSet('state', migrated);
-      localStorage.setItem(META_KEY, '1');
-      window.__PLANTENLOG_BOOTSTRAP_STATE__ = migrated;
-      return;
-    }
-    window.__PLANTENLOG_BOOTSTRAP_STATE__ = null;
-  }
-
-  function installBridges(){
-    const originalSetItem = Storage.prototype.setItem;
-    Storage.prototype.setItem = function(key, value){
-      const result = originalSetItem.apply(this, arguments);
-      try {
-        const parsed = tryParse(value);
-        if((STATE_KEY_CANDIDATES.includes(key) || looksLikeAppState(parsed)) && parsed){
-          idbSet('state', mergeDefaults(parsed)).catch(()=>{});
-        }
-      } catch(e){}
-      return result;
-    };
-
-    window.PflanzenLogDB = {
-      async getState(){
-        const state = await idbGet('state');
-        return mergeDefaults(state || findLegacyState()?.state || {});
-      },
-      async saveState(state){
-        const merged = mergeDefaults(state);
-        await idbSet('state', merged);
-        return merged;
-      },
-      async exportState(){
-        return await this.getState();
-      }
-    };
-  }
-
-  window.__PLANTENLOG_BOOTSTRAP_PROMISE__ = bootstrapState().finally(installBridges);
-})();
-</script>
-
 </head>
 <body>
 <div class="app">
@@ -287,12 +164,24 @@ function migrateState(raw){
   return state;
 }
 
-function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function hasUsefulData(s){
+  return !!(s && Array.isArray(s.arten) && s.arten.length > 0);
+}
+function saveState(){
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  catch(e){ console.error(e); alert('Speichern fehlgeschlagen. Wahrscheinlich ist der lokale Speicher voll. Bitte erst ein Backup exportieren.'); }
+}
 function loadState(){
-  if (window.__PLANTENLOG_BOOTSTRAP_STATE__) return window.__PLANTENLOG_BOOTSTRAP_STATE__;
+  const embedded = migrateState(clone(EMBEDDED_BACKUP));
   const raw = localStorage.getItem(STORAGE_KEY);
-  if(raw){ try{ return migrateState(JSON.parse(raw)); }catch(e){ console.error(e); } }
-  return migrateState(clone(EMBEDDED_BACKUP));
+  if(raw){
+    try{
+      const parsed = migrateState(JSON.parse(raw));
+      if(hasUsefulData(parsed)) return parsed;
+    }catch(e){ console.error(e); }
+  }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(embedded)); } catch(e) { console.error(e); }
+  return embedded;
 }
 
 function inferTypeHint(name='', gruppe=''){
@@ -358,7 +247,7 @@ function openModal(content){ document.getElementById('modalContent').innerHTML =
 function closeModal(){ document.getElementById('modal').classList.remove('show'); document.getElementById('modalContent').innerHTML=''; }
 document.getElementById('modal').addEventListener('click', e=>{ if(e.target.id==='modal') closeModal(); });
 
-let state = (window.__PLANTENLOG_BOOTSTRAP_STATE__ || loadState());
+let state = loadState();
 
 function renderHome(){
   const bestandCount = state.bestand.filter(b=>b.status!=='Archiv').length;
@@ -616,7 +505,7 @@ function openArtForm(artId=''){
 
 function openImageOnly(artId){ openArtForm(artId); setTimeout(()=>document.getElementById('artImageInput')?.click(), 80); }
 
-async async function saveArt(e, artId){
+async function saveArt(e, artId){
   e.preventDefault();
   const form = e.target;
   const data = Object.fromEntries(new FormData(form).entries());
@@ -646,7 +535,7 @@ function openPlantForm(plantId=''){
     </form>`);
 }
 
-async async function savePlant(e, plantId){
+async function savePlant(e, plantId){
   e.preventDefault();
   const data = Object.fromEntries(new FormData(e.target).entries());
   data.startLeafs = Number(data.startLeafs||0);
@@ -781,5 +670,183 @@ function confirmSaleSold(e, saleId){
 function renderAll(reset=true){ renderHome(); renderArten(); renderBestand(); renderFilter(); renderVerkauf(); renderTools(); if(reset) switchScreen(document.querySelector('.nav button.active')?.dataset.screen || 'home'); }
 renderAll();
 </script>
+
+<script>
+(function(){
+  const DB_NAME = 'pflanzenlog_db';
+  const STORE = 'kv';
+  const POINTER_PREFIX = '__idb_pointer__:';
+  const APP_KEY_HINTS = ['pflanzenlog', 'plants', 'state', 'backup', 'appstate', 'garten'];
+  let dbPromise = null;
+
+  function openDB(){
+    if(dbPromise) return dbPromise;
+    dbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if(!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error('IndexedDB konnte nicht geöffnet werden'));
+    });
+    return dbPromise;
+  }
+
+  async function idbSet(key, value){
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(value, key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error || new Error('IndexedDB Schreibfehler'));
+    });
+  }
+
+  async function idbGet(key){
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error('IndexedDB Lesefehler'));
+    });
+  }
+
+  async function idbRemove(key){
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).delete(key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error || new Error('IndexedDB Löschfehler'));
+    });
+  }
+
+  function shouldBridge(key, value){
+    const k = String(key || '').toLowerCase();
+    const looksRelevant = APP_KEY_HINTS.some(h => k.includes(h));
+    const bigEnough = typeof value === 'string' && value.length > 20000;
+    return looksRelevant || bigEnough;
+  }
+
+  function syncWait(promise, fallback){
+    // localStorage API is sync, so we keep a tiny pointer synchronously in localStorage.
+    // reads first check pointer and then consult an in-memory cache hydrated at startup.
+    return fallback;
+  }
+
+  const origSetItem = Storage.prototype.setItem;
+  const origGetItem = Storage.prototype.getItem;
+  const origRemoveItem = Storage.prototype.removeItem;
+  const origClear = Storage.prototype.clear;
+  const mem = new Map();
+  let hydrated = false;
+  let hydrating = false;
+
+  async function hydratePointers(){
+    if(hydrated || hydrating) return;
+    hydrating = true;
+    try {
+      for(let i=0;i<localStorage.length;i++){
+        const k = localStorage.key(i);
+        const raw = origGetItem.call(localStorage, k);
+        if(typeof raw === 'string' && raw.startsWith(POINTER_PREFIX)){
+          const realKey = raw.slice(POINTER_PREFIX.length);
+          try {
+            const val = await idbGet(realKey);
+            if(typeof val === 'string') mem.set(k, val);
+          } catch(e){ console.warn('Hydration fehlgeschlagen für', k, e); }
+        }
+      }
+    } finally {
+      hydrated = true;
+      hydrating = false;
+    }
+  }
+
+  Storage.prototype.setItem = function(key, value){
+    const skey = String(key);
+    const svalue = String(value);
+    if(shouldBridge(skey, svalue)){
+      const realKey = 'ls:' + skey;
+      mem.set(skey, svalue);
+      idbSet(realKey, svalue).then(() => {
+        try { origSetItem.call(this, skey, POINTER_PREFIX + realKey); } catch(e) { console.warn(e); }
+      }).catch(err => {
+        console.error('IndexedDB Speichern fehlgeschlagen', err);
+        try { origSetItem.call(this, skey, svalue); } catch(e) {
+          alert('Speichern fehlgeschlagen: Der lokale Speicher ist voll. Bitte exportiere zuerst ein Backup.');
+        }
+      });
+      try { origSetItem.call(this, skey, POINTER_PREFIX + realKey); } catch(e) {
+        // if even pointer fails, fall back
+        try { origSetItem.call(this, skey, svalue); } catch(e2) {}
+      }
+      return;
+    }
+    return origSetItem.call(this, skey, svalue);
+  };
+
+  Storage.prototype.getItem = function(key){
+    const skey = String(key);
+    const raw = origGetItem.call(this, skey);
+    if(typeof raw === 'string' && raw.startsWith(POINTER_PREFIX)){
+      if(mem.has(skey)) return mem.get(skey);
+      // async hydration may finish after app boot; keep pointer for now
+      return null;
+    }
+    return raw;
+  };
+
+  Storage.prototype.removeItem = function(key){
+    const skey = String(key);
+    mem.delete(skey);
+    const raw = origGetItem.call(this, skey);
+    if(typeof raw === 'string' && raw.startsWith(POINTER_PREFIX)){
+      const realKey = raw.slice(POINTER_PREFIX.length);
+      idbRemove(realKey).catch(console.warn);
+    }
+    return origRemoveItem.call(this, skey);
+  };
+
+  Storage.prototype.clear = function(){
+    mem.clear();
+    return origClear.call(this);
+  };
+
+  // Early bootstrap: hydrate pointers and expose helper for app migration.
+  window.__pflanzenlogStorage = {
+    openDB, idbGet, idbSet, idbRemove, hydratePointers,
+    async migrateLocalStorageToIDB(){
+      const keys = [];
+      for(let i=0;i<localStorage.length;i++) keys.push(localStorage.key(i));
+      for(const k of keys){
+        const v = origGetItem.call(localStorage, k);
+        if(typeof v === 'string' && !v.startsWith(POINTER_PREFIX) && shouldBridge(k, v)){
+          mem.set(k, v);
+          await idbSet('ls:' + k, v);
+          origSetItem.call(localStorage, k, POINTER_PREFIX + 'ls:' + k);
+        }
+      }
+      hydrated = true;
+    },
+    exportSnapshot(){
+      const obj = {};
+      for(let i=0;i<localStorage.length;i++){
+        const k = localStorage.key(i);
+        obj[k] = localStorage.getItem(k);
+      }
+      return obj;
+    }
+  };
+
+  // Start hydration ASAP.
+  hydratePointers().then(() => {
+    window.dispatchEvent(new CustomEvent('pflanzenlog-storage-ready'));
+  });
+})();
+</script>
+
 </body>
 </html>

@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="PflanzenLog" />
+  <title>PflanzenLog</title>
+  <style>
+    :root{
+      --bg:#f4efe2; --panel:#fff8ea; --panel-2:#f0e7d1; --line:#4a3a2b; --text:#2f241a;
+      --green:#6ea34a; --green-dark:#46692d; --accent:#d9823b; --accent-dark:#a65d21;
+      --blue:#84c2d7; --red:#c86b62; --yellow:#e7c95a; --shadow:0 6px 0 #ccb892;
+      --radius:16px;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:ui-rounded,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:linear-gradient(#efe7d4,#e8dcc1);color:var(--text);padding:calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 90px)}
+    .app{max-width:860px;margin:0 auto}
+    .title{display:flex;align-items:center;gap:12px;background:var(--panel);border:3px solid var(--line);border-radius:20px;padding:14px 16px;box-shadow:var(--shadow)}
+    .pixel{image-rendering:pixelated;image-rendering:crisp-edges}
+    .logo{width:52px;height:52px;border-radius:12px;background:linear-gradient(#98c96f,#6ea34a);display:grid;place-items:center;border:3px solid var(--line);font-size:28px}
+    h1,h2,h3{margin:0 0 10px 0}
+    .sub{opacity:.8;font-size:14px}
+    .nav{position:fixed;left:0;right:0;bottom:0;background:rgba(255,248,234,.97);backdrop-filter:blur(8px);border-top:3px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);padding:8px 8px calc(env(safe-area-inset-bottom) + 8px);gap:8px;z-index:50}
+    .nav button{border:3px solid var(--line);background:var(--panel);border-radius:14px;padding:10px 4px;font-weight:700;color:var(--text)}
+    .nav button.active{background:var(--green);color:#fff}
+    .screen{display:none;margin-top:14px}
+    .screen.active{display:block}
+    .grid{display:grid;gap:12px}
+    .grid.two{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+    .card{background:var(--panel);border:3px solid var(--line);border-radius:18px;padding:14px;box-shadow:var(--shadow)}
+    .stat{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:15px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .row.spread{justify-content:space-between}
+    .list{display:grid;gap:10px;margin-top:10px}
+    .item{background:var(--panel-2);border:3px solid var(--line);border-radius:16px;padding:10px;display:grid;grid-template-columns:72px 1fr auto;gap:10px;align-items:center}
+    .spritebox{width:72px;height:72px;border:3px solid var(--line);border-radius:14px;background:#f7f0df;display:grid;place-items:center;overflow:hidden}
+    .spritebox img{width:64px;height:64px;object-fit:contain}
+    .badge{display:inline-block;padding:4px 10px;border:2px solid var(--line);border-radius:999px;background:#fff6d2;font-size:12px;font-weight:700}
+    .muted{font-size:13px;opacity:.8}
+    button,.btn,label.upload{appearance:none;border:3px solid var(--line);background:var(--accent);color:#fff;font-weight:800;border-radius:14px;padding:10px 12px;box-shadow:0 4px 0 var(--accent-dark);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+    button.secondary,.btn.secondary,label.upload.secondary{background:var(--blue);box-shadow:0 4px 0 #568ca0;color:#173644}
+    button.ghost{background:var(--panel);color:var(--text);box-shadow:0 4px 0 #d4c5a5}
+    button.danger{background:var(--red);box-shadow:0 4px 0 #93443d}
+    button:active,.btn:active{transform:translateY(2px);box-shadow:0 2px 0 rgba(0,0,0,.2)}
+    input,select,textarea{width:100%;padding:12px 12px;border:3px solid var(--line);border-radius:14px;background:#fffdf7;color:var(--text);font-size:16px}
+    textarea{min-height:90px;resize:vertical}
+    label.field{display:grid;gap:6px;font-weight:700;font-size:14px}
+    .form{display:grid;gap:10px}
+    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+    .kpi{background:#fffdf7;border:3px solid var(--line);border-radius:16px;padding:12px;text-align:center}
+    .kpi .v{font-size:28px;font-weight:900;color:var(--green-dark)}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap}
+    .hidden{display:none !important}
+    dialog{border:none;padding:0;background:transparent;max-width:min(92vw,620px)}
+    dialog::backdrop{background:rgba(31,20,10,.55)}
+    .modal{background:var(--panel);border:3px solid var(--line);border-radius:20px;padding:14px;box-shadow:0 8px 0 #b79f76}
+    .section-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+    canvas{width:100%;background:#fffdf7;border:3px solid var(--line);border-radius:14px}
+    .small{font-size:12px}
+    .plantviz{height:180px;border:3px solid var(--line);border-radius:18px;background:linear-gradient(#d9f0ff,#fff3d8 60%,#d8c29f 60%);position:relative;overflow:hidden}
+    .pot{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);width:88px;height:60px;background:#bf6f35;border:3px solid var(--line);border-bottom-left-radius:14px;border-bottom-right-radius:14px;border-top-left-radius:8px;border-top-right-radius:8px}
+    .pot:before{content:'';position:absolute;top:-12px;left:-6px;right:-6px;height:16px;background:#d18449;border:3px solid var(--line);border-radius:10px}
+    .leaf{position:absolute;bottom:72px;left:50%;transform-origin:bottom center;background:#67a845;border:3px solid var(--line);border-radius:70% 0 70% 0}
+    .timeline{display:grid;gap:8px}
+    .timeline .t{display:flex;justify-content:space-between;gap:8px;background:#fffdf7;border:2px solid var(--line);border-radius:12px;padding:8px 10px}
+    .hint{background:#eef9d9;border:3px solid var(--green-dark);border-radius:16px;padding:10px;font-size:14px}
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="title">
+    <div class="logo pixel">🪴</div>
+    <div>
+      <h1>PflanzenLog</h1>
+      <div class="sub">Pixel-Pflanzenlogbuch für Bestand, Verkauf und Wachstum</div>
+    </div>
+  </div>
+
+  <section id="screen-home" class="screen active">
+    <div class="grid two" id="home-kpis"></div>
+    <div class="card" style="margin-top:12px">
+      <div class="section-head"><h2>Schnellstart</h2></div>
+      <div class="toolbar">
+        <button onclick="showScreen('arten')">Neue Art anlegen</button>
+        <button class="secondary" onclick="showScreen('bestand')">Bestand verwalten</button>
+      </div>
+      <div class="hint" style="margin-top:12px">Tipp: Neue Arten legst du im Bereich <b>Arten</b> an. Beim Anlegen einer Bestandspflanze wählst du die Art dann einfach im Dropdown aus.</div>
+    </div>
+  </section>
+
+  <section id="screen-arten" class="screen">
+    <div class="card">
+      <div class="section-head"><h2>Pflanzenarten</h2><button onclick="openArtModal()">+ Neue Art</button></div>
+      <div id="arten-list" class="list"></div>
+    </div>
+  </section>
+
+  <section id="screen-bestand" class="screen">
+    <div class="card">
+      <div class="section-head"><h2>Bestandspflanzen</h2><button onclick="openBestandModal()">+ Bestandspflanze</button></div>
+      <div id="bestand-list" class="list"></div>
+    </div>
+  </section>
+
+  <section id="screen-detail" class="screen">
+    <div class="card">
+      <div class="section-head"><h2 id="detail-title">Pflanzendetail</h2><button class="ghost" onclick="showScreen('bestand')">Zurück</button></div>
+      <div class="grid two">
+        <div>
+          <div class="row">
+            <div class="spritebox" style="width:96px;height:96px"><img id="detail-sprite" class="pixel" alt="Pflanze"></div>
+            <div>
+              <div class="badge" id="detail-status"></div>
+              <h3 id="detail-name" style="margin-top:8px"></h3>
+              <div class="muted" id="detail-meta"></div>
+            </div>
+          </div>
+          <div class="plantviz" id="detail-plantviz" style="margin-top:12px"></div>
+          <div class="toolbar" style="margin-top:12px">
+            <button onclick="quickLeafChange(1)">+ Blatt</button>
+            <button class="secondary" onclick="quickLeafChange(-1)">- Blatt</button>
+            <button class="ghost" onclick="openLogModal(currentDetailId)">Log-Eintrag</button>
+          </div>
+        </div>
+        <div>
+          <div class="kpis" id="detail-kpis"></div>
+          <canvas id="detail-chart" width="560" height="240" style="margin-top:12px"></canvas>
+        </div>
+      </div>
+      <div class="card" style="margin-top:12px;padding:12px">
+        <div class="section-head"><h3>Historie</h3></div>
+        <div id="detail-timeline" class="timeline"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-verkauf" class="screen">
+    <div class="card">
+      <div class="section-head"><h2>Zum Verkauf</h2><button onclick="openVerkaufModal()">+ Verkaufseintrag</button></div>
+      <div id="verkauf-list" class="list"></div>
+    </div>
+  </section>
+
+  <section id="screen-preise" class="screen">
+    <div class="card">
+      <div class="section-head"><h2>Preise & Backup</h2></div>
+      <div class="toolbar">
+        <button class="secondary" onclick="exportData()">Export JSON</button>
+        <label class="upload secondary">Import JSON<input id="import-json" type="file" accept="application/json" class="hidden"></label>
+      </div>
+      <div id="preise-list" class="list" style="margin-top:12px"></div>
+    </div>
+  </section>
+</div>
+
+<div class="nav">
+  <button class="active" data-screen="home" onclick="showScreen('home', this)">Home</button>
+  <button data-screen="arten" onclick="showScreen('arten', this)">Arten</button>
+  <button data-screen="bestand" onclick="showScreen('bestand', this)">Bestand</button>
+  <button data-screen="verkauf" onclick="showScreen('verkauf', this)">Verkauf</button>
+  <button data-screen="preise" onclick="showScreen('preise', this)">Preise</button>
+</div>
+
+<dialog id="art-modal"><div class="modal">
+  <div class="section-head"><h3 id="art-modal-title">Neue Art</h3><button class="ghost" onclick="closeModal('art-modal')">Schließen</button></div>
+  <form class="form" onsubmit="saveArt(event)">
+    <input type="hidden" id="art-id">
+    <label class="field">Name<input id="art-name" required></label>
+    <label class="field">Bereich<select id="art-bereich"><option>Indoor</option><option>Outdoor</option></select></label>
+    <label class="field">Gruppe<input id="art-gruppe" placeholder="z. B. Alocasia, Monstera, Kräuter"></label>
+    <label class="field">Sprite/Bild ändern<input id="art-image" type="file" accept="image/*"></label>
+    <div id="art-image-preview-wrap" class="hidden">
+      <div class="muted">Aktuelles Bild</div>
+      <div class="spritebox" style="width:96px;height:96px"><img id="art-image-preview" class="pixel" alt="Vorschau"></div>
+    </div>
+    <label class="field">Notiz<textarea id="art-note" placeholder="Optional"></textarea></label>
+    <button type="submit">Speichern</button>
+  </form>
+</div></dialog>
+
+<dialog id="bestand-modal"><div class="modal">
+  <div class="section-head"><h3 id="bestand-modal-title">Neue Bestandspflanze</h3><button class="ghost" onclick="closeModal('bestand-modal')">Schließen</button></div>
+  <form class="form" onsubmit="saveBestand(event)">
+    <input type="hidden" id="bestand-id">
+    <label class="field">Art auswählen<select id="bestand-art" required></select></label>
+    <label class="field">Eigener Anzeigename<input id="bestand-name" placeholder="Optional, sonst wird der Artname verwendet"></label>
+    <label class="field">Standort<input id="bestand-standort" placeholder="z. B. Wohnzimmer, Gewächshaus"></label>
+    <label class="field">Status<select id="bestand-status"><option>Bestand</option><option>Zum Verkauf</option><option>Verkauft</option></select></label>
+    <label class="field">Start-Blattanzahl<input id="bestand-startleaf" type="number" min="0" step="1" value="1"></label>
+    <label class="field">Eigenes Foto optional<input id="bestand-image" type="file" accept="image/*"></label>
+    <button type="submit">Speichern</button>
+  </form>
+</div></dialog>
+
+<dialog id="log-modal"><div class="modal">
+  <div class="section-head"><h3>Log-Eintrag</h3><button class="ghost" onclick="closeModal('log-modal')">Schließen</button></div>
+  <form class="form" onsubmit="saveLog(event)">
+    <input type="hidden" id="log-bestand-id">
+    <label class="field">Typ<select id="log-type"><option value="leaf_gain">Neues Blatt</option><option value="leaf_loss">Blattverlust</option><option value="watering">Gegossen</option><option value="fertilizer">Gedüngt</option><option value="repot">Umtopfen</option><option value="note">Notiz</option></select></label>
+    <label class="field">Anzahl<input id="log-amount" type="number" min="1" step="1" value="1"></label>
+    <label class="field">Datum<input id="log-date" type="date" required></label>
+    <label class="field">Notiz<textarea id="log-note"></textarea></label>
+    <button type="submit">Eintragen</button>
+  </form>
+</div></dialog>
+
+<dialog id="verkauf-modal"><div class="modal">
+  <div class="section-head"><h3>Verkaufseintrag</h3><button class="ghost" onclick="closeModal('verkauf-modal')">Schließen</button></div>
+  <form class="form" onsubmit="saveVerkauf(event)">
+    <label class="field">Art<select id="verkauf-art" required></select></label>
+    <label class="field">Bezeichnung<input id="verkauf-code" placeholder="z. B. M1, G1"></label>
+    <label class="field">Stufe<select id="verkauf-stufe"></select></label>
+    <label class="field">Preis (€)<input id="verkauf-preis" type="number" step="0.01" min="0"></label>
+    <button type="submit">Speichern</button>
+  </form>
+</div></dialog>
+
+<script>
+const STORAGE_KEY = 'pflanzenlog_final_v2';
+const today = new Date().toISOString().slice(0,10);
+let currentDetailId = null;
+
+function id(){ return Math.random().toString(36).slice(2,10); }
+function slug(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
+function eur(n){ return Number(n||0).toLocaleString('de-DE',{style:'currency',currency:'EUR'}); }
+function fmtDate(d){ if(!d) return ''; const [y,m,da]=d.split('-'); return `${da}.${m}.${y}`; }
+function readFileAsDataURL(file){ return new Promise((res,rej)=>{ if(!file) return res(null); const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); }); }
+function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function loadState(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)); }catch(e){ return null; } }
+
+function spriteSVG(type='leafy', a='#6ea34a', b='#8fd06b', c='#d18449'){
+  const map = {
+    alocasia:`<path d="M32 20 C20 24,16 42,24 54 C31 64,44 66,50 56 C54 46,48 34,32 20Z" fill="${a}" stroke="#2f241a" stroke-width="2"/><path d="M56 18 C44 22,40 40,48 52 C55 62,69 64,74 54 C78 44,72 32,56 18Z" fill="${b}" stroke="#2f241a" stroke-width="2"/><path d="M44 28 L44 62" stroke="#2f241a" stroke-width="2"/><path d="M58 26 L58 62" stroke="#2f241a" stroke-width="2"/>`,
+    monstera:`<path d="M28 22 C18 30,20 50,34 58 C46 62,54 54,54 42 C52 28,42 18,28 22Z" fill="${a}" stroke="#2f241a" stroke-width="2"/><circle cx="38" cy="39" r="2" fill="#f7f0df"/><circle cx="44" cy="46" r="2" fill="#f7f0df"/><path d="M58 20 C48 26,50 48,64 56 C76 60,84 52,84 40 C82 26,72 18,58 20Z" fill="${b}" stroke="#2f241a" stroke-width="2"/><circle cx="68" cy="38" r="2" fill="#f7f0df"/><circle cx="74" cy="45" r="2" fill="#f7f0df"/>`,
+    ficus:`<ellipse cx="34" cy="38" rx="12" ry="20" fill="${a}" stroke="#2f241a" stroke-width="2"/><ellipse cx="58" cy="34" rx="12" ry="20" fill="${b}" stroke="#2f241a" stroke-width="2"/><ellipse cx="46" cy="20" rx="10" ry="16" fill="#dbe8b6" stroke="#2f241a" stroke-width="2"/>`,
+    spider:`<path d="M48 20 L34 56" stroke="${a}" stroke-width="4"/><path d="M52 20 L66 56" stroke="${b}" stroke-width="4"/><path d="M50 18 L50 58" stroke="#97cd79" stroke-width="4"/><path d="M46 18 L24 48" stroke="${a}" stroke-width="3"/><path d="M54 18 L76 48" stroke="${b}" stroke-width="3"/>`,
+    succulent:`<ellipse cx="36" cy="42" rx="10" ry="18" fill="${a}" stroke="#2f241a" stroke-width="2"/><ellipse cx="50" cy="28" rx="10" ry="18" fill="${b}" stroke="#2f241a" stroke-width="2"/><ellipse cx="64" cy="42" rx="10" ry="18" fill="#89bf61" stroke="#2f241a" stroke-width="2"/>`,
+    peace:`<ellipse cx="36" cy="38" rx="10" ry="18" fill="${a}" stroke="#2f241a" stroke-width="2"/><ellipse cx="62" cy="34" rx="10" ry="18" fill="${b}" stroke="#2f241a" stroke-width="2"/><path d="M50 26 C60 18,66 24,58 36 C50 42,44 34,50 26Z" fill="#fff9ef" stroke="#2f241a" stroke-width="2"/>`,
+    vine:`<path d="M28 24 C40 18,44 28,38 36 C30 42,24 36,28 24Z" fill="${a}" stroke="#2f241a" stroke-width="2"/><path d="M48 18 C60 12,64 22,58 30 C50 36,44 30,48 18Z" fill="${b}" stroke="#2f241a" stroke-width="2"/><path d="M66 28 C78 22,82 32,76 40 C68 46,62 40,66 28Z" fill="#90c86b" stroke="#2f241a" stroke-width="2"/>`,
+    herb:`<path d="M42 16 L36 56" stroke="${a}" stroke-width="4"/><path d="M50 14 L50 56" stroke="${b}" stroke-width="4"/><path d="M58 16 L64 56" stroke="#88bf63" stroke-width="4"/>`,
+  };
+  const top = map[type] || map.leafy || map.alocasia;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
+    <rect width='100' height='100' fill='transparent'/>
+    ${top}
+    <rect x='26' y='60' width='48' height='26' rx='6' fill='${c}' stroke='#2f241a' stroke-width='3'/>
+    <rect x='20' y='54' width='60' height='10' rx='5' fill='#d99256' stroke='#2f241a' stroke-width='3'/>
+    <rect x='28' y='58' width='44' height='5' rx='2' fill='#5d3a21'/>
+  </svg>`)}`;
+}
+
+const defaultArtData = [
+  ['Silver Dragon','Indoor','Alocasia','alocasia'],['Dragon Scale','Indoor','Alocasia','alocasia'],['Gageana albo Variegata','Indoor','Alocasia','alocasia'],['Frydek','Indoor','Alocasia','alocasia'],['Frydek variegata','Indoor','Alocasia','alocasia'],['Odoro batik Variegata','Indoor','Alocasia','alocasia'],['Macrorrhiza','Indoor','Alocasia','alocasia'],['Polly','Indoor','Alocasia','alocasia'],['Boyceana Shattered Glass','Indoor','Alocasia','alocasia'],['Macrorrhiza Splash','Indoor','Alocasia','alocasia'],['Gageana Aurea','Indoor','Alocasia','alocasia'],['Dragon Scale albo Variegata','Indoor','Alocasia','alocasia'],['Black Velvet Pink','Indoor','Alocasia','alocasia'],['Simbo albo','Indoor','Alocasia','alocasia'],['Dragon Scale Mint','Indoor','Alocasia','alocasia'],
+  ['Einblatt','Indoor','Spathiphyllum','peace'],['Monstera Deliciosa','Indoor','Monstera','monstera'],['Monstera Thai Constellation','Indoor','Monstera','monstera'],['Monstera Monkey Leaf','Indoor','Monstera','monstera'],['Efeutute','Indoor','Epipremnum','vine'],['Grünlilie','Indoor','Chlorophytum','spider'],['Crassula Ovata','Indoor','Sukkulente','succulent'],['Syngonium Confetti','Indoor','Syngonium','vine'],['Efeutute albo','Indoor','Epipremnum','vine'],['Ficus Tineke','Indoor','Ficus','ficus'],
+  ['Tomate','Outdoor','Gemüse','herb'],['Basilikum','Outdoor','Kräuter','herb'],['Rosmarin','Outdoor','Kräuter','herb']
+];
+
+const preisMap = {
+  'Einblatt': {'Steckling in Wasser':2,'2 Blätter':6,'4 Blätter':10,'6 Blätter':15},
+  'Monstera Deliciosa': {'Steckling in Wasser':3,'2 Blätter':15,'4 Blätter':25,'6 Blätter':30},
+  'Monstera Thai Constellation': {'Steckling in Wasser':15,'2 Blätter':25,'4 Blätter':35,'6 Blätter':45},
+  'Monstera Monkey Leaf': {'Steckling in Wasser':2,'2 Blätter':10,'4 Blätter':15,'6 Blätter':20},
+  'Efeutute': {'Steckling in Wasser':2,'2 Blätter':5,'4 Blätter':10,'6 Blätter':15},
+  'Grünlilie': {'Steckling in Wasser':2,'2 Blätter':5,'4 Blätter':10,'6 Blätter':15},
+  'Crassula Ovata': {'Steckling in Wasser':3,'2 Blätter':15,'4 Blätter':25,'6 Blätter':30},
+  'Syngonium Confetti': {'Steckling in Wasser':3,'2 Blätter':8,'4 Blätter':15,'6 Blätter':20},
+  'Efeutute albo': {'Steckling in Wasser':2,'2 Blätter':5,'4 Blätter':10,'6 Blätter':15},
+  'Ficus Tineke': {'Steckling in Wasser':3,'2 Blätter':15,'4 Blätter':25,'6 Blätter':30},
+  'Silver Dragon': {'Rhizome mit Perlit':3,'2 Blätter':8,'4 Blätter':13,'6 Blätter':20},
+  'Dragon Scale': {'Rhizome mit Perlit':3,'2 Blätter':8,'4 Blätter':13,'6 Blätter':20},
+  'Gageana albo Variegata': {'Rhizome mit Perlit':8,'2 Blätter':15,'4 Blätter':25,'6 Blätter':50},
+  'Frydek': {'Rhizome mit Perlit':3,'2 Blätter':8,'4 Blätter':13,'6 Blätter':20},
+  'Frydek variegata': {'Rhizome mit Perlit':8,'2 Blätter':12,'4 Blätter':20,'6 Blätter':30},
+  'Odoro batik Variegata': {'Rhizome mit Perlit':8,'2 Blätter':15,'4 Blätter':25,'6 Blätter':40},
+  'Macrorrhiza': {'Rhizome mit Perlit':3,'2 Blätter':8,'4 Blätter':13,'6 Blätter':30},
+  'Polly': {'Rhizome mit Perlit':3,'2 Blätter':8,'4 Blätter':13,'6 Blätter':20},
+  'Boyceana Shattered Glass': {'Rhizome mit Perlit':10,'2 Blätter':15,'4 Blätter':25,'6 Blätter':40},
+  'Macrorrhiza Splash': {'Rhizome mit Perlit':5,'2 Blätter':15,'4 Blätter':25,'6 Blätter':35},
+  'Gageana Aurea': {'Rhizome mit Perlit':5,'2 Blätter':10,'4 Blätter':20,'6 Blätter':30},
+  'Dragon Scale albo Variegata': {'Rhizome mit Perlit':15,'2 Blätter':35,'4 Blätter':50,'6 Blätter':70},
+  'Black Velvet Pink': {'Rhizome mit Perlit':15,'2 Blätter':12,'4 Blätter':20,'6 Blätter':30},
+  'Simbo albo': {'Rhizome mit Perlit':15,'2 Blätter':35,'4 Blätter':50,'6 Blätter':70},
+  'Dragon Scale Mint': {'Rhizome mit Perlit':10,'2 Blätter':15,'4 Blätter':25,'6 Blätter':40}
+};
+
+function defaultSpriteFor(name, typeHint=''){
+  const s = (name+' '+typeHint).toLowerCase();
+  if (s.includes('monstera')) return spriteSVG('monstera','#5f9f46','#79bb58');
+  if (s.includes('ficus')) return spriteSVG('ficus','#6aa54b','#8ad16f');
+  if (s.includes('grünlilie') || s.includes('chlorophytum')) return spriteSVG('spider','#5a9c3e','#8dc76d');
+  if (s.includes('einblatt') || s.includes('spathiphyllum')) return spriteSVG('peace','#5f9f46','#7abb5a');
+  if (s.includes('crassula')) return spriteSVG('succulent','#5b9741','#7dbb5d');
+  if (s.includes('efeutute') || s.includes('epipremnum') || s.includes('syngonium')) return spriteSVG('vine','#67a845','#8ccd6a');
+  if (s.includes('basilikum') || s.includes('rosmarin') || s.includes('tomate') || s.includes('krauter')) return spriteSVG('herb','#5f9f46','#83c461');
+  return spriteSVG('alocasia','#6ea34a','#8fd06b');
+}
+
+let state = loadState() || {
+  arten: defaultArtData.map(([name,bereich,gruppe,type])=>({id:id(),name,bereich,gruppe,typeHint:type,note:'',image:defaultSpriteFor(name,type)})),
+  bestand: [],
+  logs: [],
+  verkauf: []
+};
+
+function artById(artId){ return state.arten.find(a=>a.id===artId); }
+function bestById(bid){ return state.bestand.find(b=>b.id===bid); }
+function getDisplayImageForBestand(b){ return b.image || artById(b.artId)?.image || defaultSpriteFor(artById(b.artId)?.name||''); }
+function currentLeafCount(bestandId){
+  const b = bestById(bestandId); if(!b) return 0;
+  let c = Number(b.startLeafs||0);
+  for(const l of state.logs.filter(x=>x.bestandId===bestandId)){
+    if(l.type==='leaf_gain') c += Number(l.amount||1);
+    if(l.type==='leaf_loss') c -= Number(l.amount||1);
+  }
+  return Math.max(0,c);
+}
+
+function showScreen(name, btn){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active', b.dataset.screen===name));
+  if(name==='detail' && currentDetailId) renderDetail(currentDetailId);
+}
+
+function closeModal(id){ document.getElementById(id).close(); }
+function openArtModal(artId=null){
+  const m=document.getElementById('art-modal');
+  const art = artId ? artById(artId) : null;
+  document.getElementById('art-modal-title').textContent = art ? 'Art bearbeiten' : 'Neue Art';
+  document.getElementById('art-id').value = art?.id || '';
+  document.getElementById('art-name').value = art?.name || '';
+  document.getElementById('art-bereich').value = art?.bereich || 'Indoor';
+  document.getElementById('art-gruppe').value = art?.gruppe || '';
+  document.getElementById('art-note').value = art?.note || '';
+  document.getElementById('art-image').value = '';
+  const wrap = document.getElementById('art-image-preview-wrap');
+  const img = document.getElementById('art-image-preview');
+  if(art?.image){ img.src = art.image; wrap.classList.remove('hidden'); } else { wrap.classList.add('hidden'); }
+  m.showModal();
+}
+async function saveArt(ev){
+  ev.preventDefault();
+  const artId = document.getElementById('art-id').value;
+  const file = document.getElementById('art-image').files[0];
+  const uploaded = await readFileAsDataURL(file);
+  if(artId){
+    const a = artById(artId); if(!a) return;
+    a.name = document.getElementById('art-name').value.trim();
+    a.bereich = document.getElementById('art-bereich').value;
+    a.gruppe = document.getElementById('art-gruppe').value.trim();
+    a.note = document.getElementById('art-note').value.trim();
+    if(uploaded) a.image = uploaded;
+    if(!a.image) a.image = defaultSpriteFor(a.name,a.typeHint||a.gruppe);
+  } else {
+    const name = document.getElementById('art-name').value.trim();
+    const gruppe = document.getElementById('art-gruppe').value.trim();
+    state.arten.unshift({id:id(),name,bereich:document.getElementById('art-bereich').value,gruppe,note:document.getElementById('art-note').value.trim(),typeHint:slug(gruppe),image:uploaded || defaultSpriteFor(name,gruppe)});
+  }
+  saveState();
+  renderAll();
+  closeModal('art-modal');
+}
+
+function populateArtSelects(){
+  const opts = state.arten.map(a=>`<option value="${a.id}">${escapeHtml(a.name)}${a.gruppe?` – ${escapeHtml(a.gruppe)}`:''}</option>`).join('');
+  document.getElementById('bestand-art').innerHTML = `<option value="" disabled selected>Art wählen</option>${opts}`;
+  document.getElementById('verkauf-art').innerHTML = `<option value="" disabled selected>Art wählen</option>${opts}`;
+}
+function openBestandModal(bestandId=null){
+  populateArtSelects();
+  const b = bestandId ? bestById(bestandId) : null;
+  document.getElementById('bestand-modal-title').textContent = b ? 'Bestandspflanze bearbeiten' : 'Neue Bestandspflanze';
+  document.getElementById('bestand-id').value = b?.id || '';
+  document.getElementById('bestand-art').value = b?.artId || '';
+  document.getElementById('bestand-name').value = b?.name || '';
+  document.getElementById('bestand-standort').value = b?.standort || '';
+  document.getElementById('bestand-status').value = b?.status || 'Bestand';
+  document.getElementById('bestand-startleaf').value = b?.startLeafs ?? 1;
+  document.getElementById('bestand-image').value = '';
+  document.getElementById('bestand-modal').showModal();
+}
+async function saveBestand(ev){
+  ev.preventDefault();
+  const bestId = document.getElementById('bestand-id').value;
+  const file = document.getElementById('bestand-image').files[0];
+  const uploaded = await readFileAsDataURL(file);
+  const payload = {
+    artId: document.getElementById('bestand-art').value,
+    name: document.getElementById('bestand-name').value.trim(),
+    standort: document.getElementById('bestand-standort').value.trim(),
+    status: document.getElementById('bestand-status').value,
+    startLeafs: Number(document.getElementById('bestand-startleaf').value || 0),
+  };
+  if(bestId){
+    const b = bestById(bestId); Object.assign(b, payload); if(uploaded) b.image = uploaded;
+  } else {
+    state.bestand.unshift({id:id(), ...payload, image: uploaded || ''});
+  }
+  saveState(); renderAll(); closeModal('bestand-modal');
+}
+
+function openLogModal(bestandId){
+  document.getElementById('log-bestand-id').value = bestandId;
+  document.getElementById('log-type').value = 'leaf_gain';
+  document.getElementById('log-amount').value = 1;
+  document.getElementById('log-date').value = today;
+  document.getElementById('log-note').value = '';
+  document.getElementById('log-modal').showModal();
+}
+function saveLog(ev){
+  ev.preventDefault();
+  state.logs.unshift({id:id(), bestandId:document.getElementById('log-bestand-id').value, type:document.getElementById('log-type').value, amount:Number(document.getElementById('log-amount').value||1), date:document.getElementById('log-date').value, note:document.getElementById('log-note').value.trim()});
+  saveState(); renderAll(); if(currentDetailId) renderDetail(currentDetailId); closeModal('log-modal');
+}
+function quickLeafChange(delta){
+  if(!currentDetailId) return;
+  state.logs.unshift({id:id(), bestandId:currentDetailId, type:delta>0?'leaf_gain':'leaf_loss', amount:Math.abs(delta), date:today, note:''});
+  saveState(); renderAll(); renderDetail(currentDetailId);
+}
+
+function openVerkaufModal(){
+  populateArtSelects();
+  document.getElementById('verkauf-art').value = '';
+  document.getElementById('verkauf-code').value = '';
+  document.getElementById('verkauf-stufe').innerHTML = '';
+  document.getElementById('verkauf-preis').value = '';
+  document.getElementById('verkauf-modal').showModal();
+}
+function updateVerkaufStufen(){
+  const art = state.arten.find(a=>a.id===document.getElementById('verkauf-art').value);
+  const preise = preisMap[art?.name] || {'2 Blätter':0};
+  const select = document.getElementById('verkauf-stufe');
+  select.innerHTML = Object.keys(preise).map(k=>`<option>${escapeHtml(k)}</option>`).join('');
+  document.getElementById('verkauf-preis').value = preise[select.value] ?? 0;
+}
+function saveVerkauf(ev){
+  ev.preventDefault();
+  state.verkauf.unshift({id:id(), artId:document.getElementById('verkauf-art').value, code:document.getElementById('verkauf-code').value.trim(), stufe:document.getElementById('verkauf-stufe').value, preis:Number(document.getElementById('verkauf-preis').value||0)});
+  saveState(); renderAll(); closeModal('verkauf-modal');
+}
+
+function deleteArt(idv){ if(!confirm('Art wirklich löschen?')) return; state.arten = state.arten.filter(a=>a.id!==idv); saveState(); renderAll(); }
+function deleteBestand(idv){ if(!confirm('Bestandspflanze wirklich löschen?')) return; state.bestand = state.bestand.filter(b=>b.id!==idv); state.logs = state.logs.filter(l=>l.bestandId!==idv); saveState(); renderAll(); }
+function deleteLog(idv){ if(!confirm('Log-Eintrag löschen?')) return; state.logs = state.logs.filter(l=>l.id!==idv); saveState(); renderAll(); if(currentDetailId) renderDetail(currentDetailId); }
+function deleteVerkauf(idv){ if(!confirm('Verkaufseintrag löschen?')) return; state.verkauf = state.verkauf.filter(v=>v.id!==idv); saveState(); renderAll(); }
+
+function escapeHtml(s){ return (s||'').replace(/[&<>\"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function renderArten(){
+  const el = document.getElementById('arten-list');
+  el.innerHTML = state.arten.map(a=>`<div class="item">
+    <div class="spritebox"><img class="pixel" src="${a.image}" alt="${escapeHtml(a.name)}"></div>
+    <div>
+      <div><b>${escapeHtml(a.name)}</b></div>
+      <div class="muted">${escapeHtml(a.bereich)}${a.gruppe?` · ${escapeHtml(a.gruppe)}`:''}</div>
+      ${a.note?`<div class="small muted">${escapeHtml(a.note)}</div>`:''}
+    </div>
+    <div class="toolbar">
+      <button class="secondary" onclick="openArtModal('${a.id}')">Bearbeiten</button>
+      <button class="ghost" onclick="openArtModal('${a.id}')">Bild ändern</button>
+    </div>
+  </div>`).join('');
+}
+function renderBestand(){
+  const el = document.getElementById('bestand-list');
+  if(!state.bestand.length){ el.innerHTML = `<div class="muted">Noch keine Bestandspflanzen angelegt.</div>`; return; }
+  el.innerHTML = state.bestand.map(b=>{ const a=artById(b.artId); const leaves=currentLeafCount(b.id); return `<div class="item">
+    <div class="spritebox" onclick="openDetail('${b.id}')"><img class="pixel" src="${getDisplayImageForBestand(b)}" alt="${escapeHtml(a?.name||'Pflanze')}"></div>
+    <div onclick="openDetail('${b.id}')" style="cursor:pointer">
+      <div><b>${escapeHtml(b.name || a?.name || 'Unbenannt')}</b></div>
+      <div class="muted">${escapeHtml(a?.name||'')} · ${escapeHtml(b.standort||'Kein Standort')}</div>
+      <div class="row" style="margin-top:6px"><span class="badge">${escapeHtml(b.status)}</span><span class="badge">${leaves} Blätter</span></div>
+    </div>
+    <div class="toolbar">
+      <button class="secondary" onclick="openBestandModal('${b.id}')">Bearbeiten</button>
+      <button class="ghost" onclick="openDetail('${b.id}')">Öffnen</button>
+    </div>
+  </div>`; }).join('');
+}
+function renderVerkauf(){
+  const el=document.getElementById('verkauf-list');
+  if(!state.verkauf.length){ el.innerHTML='<div class="muted">Noch keine Verkaufseinträge.</div>'; return; }
+  el.innerHTML = state.verkauf.map(v=>{ const a=artById(v.artId); return `<div class="item">
+    <div class="spritebox"><img class="pixel" src="${a?.image || defaultSpriteFor(a?.name||'')}" alt="${escapeHtml(a?.name||'Pflanze')}"></div>
+    <div><b>${escapeHtml(a?.name||'')}</b><div class="muted">${escapeHtml(v.code||'-')} · ${escapeHtml(v.stufe||'')}</div><div class="badge">${eur(v.preis)}</div></div>
+    <div class="toolbar"><button class="danger" onclick="deleteVerkauf('${v.id}')">Löschen</button></div>
+  </div>`; }).join('');
+}
+function renderPreise(){
+  const el=document.getElementById('preise-list');
+  const rows = Object.entries(preisMap).slice(0,12).map(([art, stufen])=>`<div class="item" style="grid-template-columns:1fr auto"><div><b>${escapeHtml(art)}</b><div class="small muted">${Object.entries(stufen).map(([k,v])=>`${escapeHtml(k)}: ${eur(v)}`).join(' · ')}</div></div></div>`).join('');
+  el.innerHTML = rows + `<div class="muted">Preisstaffeln sind für die bekannten Arten hinterlegt und werden im Verkauf automatisch vorgeschlagen.</div>`;
+}
+function renderHome(){
+  const k = document.getElementById('home-kpis');
+  const verkaufCount = state.bestand.filter(b=>b.status==='Zum Verkauf').length + state.verkauf.length;
+  const newLeaves30 = state.logs.filter(l=>l.type==='leaf_gain').length;
+  k.innerHTML = `
+    <div class="card stat"><span>Arten</span><span>${state.arten.length}</span></div>
+    <div class="card stat"><span>Bestand</span><span>${state.bestand.length}</span></div>
+    <div class="card stat"><span>Zum Verkauf</span><span>${verkaufCount}</span></div>
+    <div class="card stat"><span>Neue Blätter</span><span>${newLeaves30}</span></div>`;
+}
+function openDetail(idv){ currentDetailId=idv; renderDetail(idv); showScreen('detail'); }
+function renderDetail(idv){
+  const b=bestById(idv); if(!b) return;
+  const a=artById(b.artId);
+  document.getElementById('detail-title').textContent = b.name || a?.name || 'Pflanzendetail';
+  document.getElementById('detail-sprite').src = getDisplayImageForBestand(b);
+  document.getElementById('detail-status').textContent = b.status;
+  document.getElementById('detail-name').textContent = b.name || a?.name || '';
+  document.getElementById('detail-meta').textContent = `${a?.name||''} · ${b.standort||'Kein Standort'}`;
+  const logs = state.logs.filter(l=>l.bestandId===idv).sort((x,y)=>x.date.localeCompare(y.date));
+  const gained = logs.filter(l=>l.type==='leaf_gain').reduce((s,l)=>s+Number(l.amount||1),0);
+  const lost = logs.filter(l=>l.type==='leaf_loss').reduce((s,l)=>s+Number(l.amount||1),0);
+  const current = currentLeafCount(idv);
+  document.getElementById('detail-kpis').innerHTML = `
+    <div class="kpi"><div>Aktuell</div><div class="v">${current}</div></div>
+    <div class="kpi"><div>Gewonnen</div><div class="v">${gained}</div></div>
+    <div class="kpi"><div>Verloren</div><div class="v">${lost}</div></div>
+    <div class="kpi"><div>Start</div><div class="v">${b.startLeafs}</div></div>`;
+  renderPlantViz(current);
+  renderChart(b, logs);
+  document.getElementById('detail-timeline').innerHTML = logs.length ? logs.slice().reverse().map(l=>`<div class="t"><span>${labelForLog(l)}</span><span>${fmtDate(l.date)} <button class="ghost small" onclick="deleteLog('${l.id}')">Löschen</button></span></div>`).join('') : '<div class="muted">Noch keine Einträge.</div>';
+}
+function labelForLog(l){
+  const t = {leaf_gain:`+${l.amount} Blatt`,leaf_loss:`-${l.amount} Blatt`,watering:'Gegossen',fertilizer:'Gedüngt',repot:'Umtopfen',note:'Notiz'}[l.type] || l.type;
+  return l.note ? `${t} – ${escapeHtml(l.note)}` : t;
+}
+function renderPlantViz(count){
+  const wrap=document.getElementById('detail-plantviz');
+  wrap.innerHTML='<div class="pot"></div>';
+  const max = Math.min(12, Math.max(0,count));
+  for(let i=0;i<max;i++){
+    const leaf=document.createElement('div');
+    leaf.className='leaf';
+    const side = i%2===0 ? -1 : 1;
+    const layer = Math.floor(i/2);
+    leaf.style.width = (34 - Math.min(layer*2,10)) + 'px';
+    leaf.style.height = (56 - Math.min(layer*3,18)) + 'px';
+    leaf.style.left = `calc(50% + ${side*(10+layer*8)}px)`;
+    leaf.style.transform = `translateX(-50%) rotate(${side*(18+layer*4)}deg)`;
+    leaf.style.background = i%3===0 ? '#76b94e' : (i%3===1 ? '#5d9e41' : '#89ca62');
+    wrap.appendChild(leaf);
+  }
+}
+function renderChart(b, logs){
+  const canvas=document.getElementById('detail-chart'); const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const pts=[{date:today,val:Number(b.startLeafs||0), synthetic:true}];
+  let c=Number(b.startLeafs||0);
+  const ordered=logs.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  for(const l of ordered){ if(l.type==='leaf_gain') c+=Number(l.amount||1); if(l.type==='leaf_loss') c-=Number(l.amount||1); pts.push({date:l.date,val:Math.max(0,c)}); }
+  const values=pts.map(p=>p.val); const max=Math.max(3,...values); const min=0;
+  const pad=34, w=canvas.width-pad*2, h=canvas.height-pad*2;
+  ctx.strokeStyle='#4a3a2b'; ctx.lineWidth=2;
+  ctx.strokeRect(pad,pad,w,h);
+  ctx.fillStyle='#2f241a'; ctx.font='14px sans-serif';
+  for(let i=0;i<=max;i++){
+    const y = pad + h - (i-min)/(max-min||1)*h;
+    ctx.strokeStyle='#e2d5bb'; ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(pad+w,y); ctx.stroke();
+    ctx.fillText(String(i),8,y+4);
+  }
+  if(pts.length===1){ ctx.fillText('Noch keine Verlaufseinträge', pad+20, pad+24); return; }
+  ctx.strokeStyle='#6ea34a'; ctx.lineWidth=4; ctx.beginPath();
+  pts.forEach((p,i)=>{ const x=pad + (i/(pts.length-1))*w; const y=pad + h - ((p.val-min)/(max-min||1))*h; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }); ctx.stroke();
+  ctx.fillStyle='#d9823b';
+  pts.forEach((p,i)=>{ const x=pad + (i/(pts.length-1))*w; const y=pad + h - ((p.val-min)/(max-min||1))*h; ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill(); });
+}
+
+function exportData(){
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='pflanzenlog_backup.json'; a.click(); URL.revokeObjectURL(a.href);
+}
+document.getElementById('import-json').addEventListener('change', async (e)=>{
+  const f=e.target.files[0]; if(!f) return; const text=await f.text(); state=JSON.parse(text); saveState(); renderAll();
+});
+document.getElementById('verkauf-art').addEventListener('change', updateVerkaufStufen);
+document.getElementById('verkauf-stufe').addEventListener('change', ()=>{
+  const art = state.arten.find(a=>a.id===document.getElementById('verkauf-art').value);
+  const preise = preisMap[art?.name] || {}; document.getElementById('verkauf-preis').value = preise[document.getElementById('verkauf-stufe').value] ?? 0;
+});
+
+function renderAll(){ renderHome(); renderArten(); renderBestand(); renderVerkauf(); renderPreise(); populateArtSelects(); if(currentDetailId && bestById(currentDetailId)) renderDetail(currentDetailId); }
+renderAll();
+</script>
+</body>
+</html>

@@ -259,6 +259,85 @@ function openModal(content){ document.getElementById('modalContent').innerHTML =
 function closeModal(){ document.getElementById('modal').classList.remove('show'); document.getElementById('modalContent').innerHTML=''; }
 document.getElementById('modal').addEventListener('click', e=>{ if(e.target.id==='modal') closeModal(); });
 
+
+
+// --- Durable storage helpers (patched) ---
+async function loadMeta(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY + '_meta');
+    if(raw) return JSON.parse(raw);
+  } catch(e){ console.error(e); }
+  return {snapshots:[], lastSavedAt:null, saveCount:0};
+}
+
+async function saveMeta(meta){
+  try {
+    localStorage.setItem(STORAGE_KEY + '_meta', JSON.stringify(meta||{}));
+    if(window.__pflanzenlogStorage && window.__pflanzenlogStorage.idbSet){
+      await window.__pflanzenlogStorage.idbSet('meta:' + STORAGE_KEY, JSON.stringify(meta||{}));
+    }
+  } catch(e){ console.error(e); }
+}
+
+async function loadLatestSnapshot(){
+  try {
+    const direct = localStorage.getItem(STORAGE_KEY + '_latestSnapshot');
+    if(direct) return migrateState(JSON.parse(direct));
+  } catch(e){ console.error(e); }
+  try {
+    if(window.__pflanzenlogStorage && window.__pflanzenlogStorage.idbGet){
+      const raw = await window.__pflanzenlogStorage.idbGet('snapshot:' + STORAGE_KEY + ':latest');
+      if(raw) return migrateState(JSON.parse(raw));
+    }
+  } catch(e){ console.error(e); }
+  return null;
+}
+
+async function recoverDurableState(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const parsed = migrateState(JSON.parse(raw));
+      if(hasUsefulData(parsed)) return parsed;
+    }
+  } catch(e){ console.error(e); }
+  try {
+    const snap = await loadLatestSnapshot();
+    if(snap && hasUsefulData(snap)) return snap;
+  } catch(e){ console.error(e); }
+  return null;
+}
+
+async function persistStateDurable(nextState){
+  const payload = JSON.stringify(nextState);
+  const now = new Date().toISOString();
+
+  // Main save path
+  localStorage.setItem(STORAGE_KEY, payload);
+  localStorage.setItem(STORAGE_KEY + '_lastSavedAt', now);
+  localStorage.setItem(STORAGE_KEY + '_latestSnapshot', payload);
+
+  // IndexedDB mirror when available
+  try {
+    if(window.__pflanzenlogStorage && window.__pflanzenlogStorage.idbSet){
+      await window.__pflanzenlogStorage.idbSet('snapshot:' + STORAGE_KEY + ':latest', payload);
+      await window.__pflanzenlogStorage.idbSet('state:' + STORAGE_KEY, payload);
+    }
+  } catch(e){ console.error(e); }
+
+  // Lightweight meta + rolling snapshots
+  let meta = await loadMeta();
+  meta = meta && typeof meta === 'object' ? meta : {snapshots:[], lastSavedAt:null, saveCount:0};
+  meta.saveCount = Number(meta.saveCount||0) + 1;
+  meta.lastSavedAt = now;
+  meta.snapshots = Array.isArray(meta.snapshots) ? meta.snapshots : [];
+  meta.snapshots.unshift({ts: now});
+  meta.snapshots = meta.snapshots.slice(0, 10);
+  await saveMeta(meta);
+  return true;
+}
+// --- end patched helpers ---
+
 let state = loadState();
 let safetyMeta = {snapshots:[], lastSavedAt:null, saveCount:0};
 

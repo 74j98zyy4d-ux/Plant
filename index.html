@@ -77,6 +77,12 @@
       .plant-row > .actions,.sale-row > .actions{grid-column:1 / -1}
       .price-row{grid-template-columns:1fr 1fr;}
     }
+  
+    .notice{background:#fff8ea;border:3px solid var(--line);border-radius:16px;padding:12px;margin-top:10px}
+    .notice.ok{background:#eef8e8}
+    .notice.warn{background:#fff4dd}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+
   </style>
 </head>
 <body>
@@ -167,9 +173,15 @@ function migrateState(raw){
 function hasUsefulData(s){
   return !!(s && Array.isArray(s.arten) && s.arten.length > 0);
 }
-function saveState(){
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-  catch(e){ console.error(e); alert('Speichern fehlgeschlagen. Wahrscheinlich ist der lokale Speicher voll. Bitte erst ein Backup exportieren.'); }
+async function saveState(){
+  try {
+    await persistStateDurable(state);
+    updateSafetyStatus();
+  }
+  catch(e){
+    console.error(e);
+    alert('Speichern fehlgeschlagen. Bitte sofort ein Backup exportieren.');
+  }
 }
 function loadState(){
   const embedded = migrateState(clone(EMBEDDED_BACKUP));
@@ -248,6 +260,57 @@ function closeModal(){ document.getElementById('modal').classList.remove('show')
 document.getElementById('modal').addEventListener('click', e=>{ if(e.target.id==='modal') closeModal(); });
 
 let state = loadState();
+let safetyMeta = {snapshots:[], lastSavedAt:null, saveCount:0};
+
+async function initDurableRecovery(){
+  try{
+    const recovered = await recoverDurableState();
+    if(recovered && JSON.stringify(recovered)!==JSON.stringify(state)){
+      state = migrateState(recovered);
+      renderAll();
+    }
+    safetyMeta = await loadMeta();
+    updateSafetyStatus();
+  }catch(e){ console.error(e); }
+}
+setTimeout(initDurableRecovery, 0);
+
+function fmtDateTime(iso){
+  if(!iso) return 'noch keine Sicherung';
+  try{ return new Date(iso).toLocaleString('de-DE'); }catch(e){ return iso; }
+}
+
+function updateSafetyStatus(){
+  const el = document.getElementById('safetyStatus');
+  if(!el) return;
+  const lastSaved = (safetyMeta && safetyMeta.lastSavedAt) || localStorage.getItem(STORAGE_KEY + '_lastSavedAt') || null;
+  const snapCount = safetyMeta && Array.isArray(safetyMeta.snapshots) ? safetyMeta.snapshots.length : 0;
+  el.innerHTML = `
+    <div class="notice ok">
+      <b>Datensicherheit</b><br>
+      Letzte automatische Sicherung: <span class="mono">${fmtDateTime(lastSaved)}</span><br>
+      Lokale Sicherungspunkte: <span class="mono">${snapCount}</span>
+    </div>`;
+}
+
+async function restoreLatestSnapshot(){
+  const snap = await loadLatestSnapshot();
+  if(!snap || !hasUsefulData(snap)) return alert('Keine verwendbare Sicherung gefunden.');
+  if(!confirm('Letzte automatische Sicherung wiederherstellen? Aktuelle lokale Änderungen werden überschrieben.')) return;
+  state = migrateState(clone(snap));
+  await saveState();
+  renderAll();
+  alert('Sicherung wiederhergestellt.');
+}
+
+async function clearBrokenLocalCache(){
+  if(!confirm('Nur den aktuellen lokalen Zwischenspeicher leeren? Die letzte Sicherung in IndexedDB bleibt erhalten.')) return;
+  try{
+    localStorage.removeItem(STORAGE_KEY);
+    alert('Lokaler Zwischenspeicher geleert. Seite bitte neu laden.');
+  }catch(e){ console.error(e); }
+}
+
 
 function renderHome(){
   const bestandCount = state.bestand.filter(b=>b.status!=='Archiv').length;
@@ -309,7 +372,7 @@ function renderArten(){
             </div>
             <div class="actions row">
               <button class="small" onclick="openArtForm('${art.id}')">Bearbeiten</button>
-              <button class="small accent" onclick="openImageOnly('${art.id}')">Bild ändern</button>
+              <button class="small accent" onclick="openImageOnly('${art.id}')">Bild ändern</button><button class="small danger" onclick="deleteArt('${art.id}')">Art löschen</button>
             </div>
           </div>`).join('')}
       </div>
@@ -503,6 +566,20 @@ function openArtForm(artId=''){
     </form>`);
 }
 
+
+function deleteArt(artId){
+  const art = getArt(artId);
+  if(!art) return;
+  const usage = state.bestand.filter(b=>b.artId===artId).length + state.verkauf.filter(v=>v.artId===artId).length;
+  const msg = usage>0 ? `Die Art „${art.name}“ ist noch ${usage}x verknüpft. Trotzdem löschen? Bestand und Verkäufe bleiben erhalten, verlieren aber die Art-Zuordnung.` : `Art „${art.name}“ wirklich löschen?`;
+  if(!confirm(msg)) return;
+  state.arten = state.arten.filter(a=>a.id!==artId);
+  for(const b of state.bestand){ if(b.artId===artId) b.artId=''; }
+  for(const v of state.verkauf){ if(v.artId===artId) v.artId=''; }
+  saveState();
+  renderAll();
+}
+
 function openImageOnly(artId){ openArtForm(artId); setTimeout(()=>document.getElementById('artImageInput')?.click(), 80); }
 
 async function saveArt(e, artId){
@@ -682,7 +759,7 @@ renderAll();
   function openDB(){
     if(dbPromise) return dbPromise;
     dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, 1);
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
       req.onupgradeneeded = () => {
         const db = req.result;
         if(!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);

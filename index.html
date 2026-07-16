@@ -83,7 +83,10 @@
     .notice.warn{background:#fff4dd}
     .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
 
-  </style>
+  
+.hidden{display:none!important;}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#23301f;color:#f7f1d5;padding:10px 14px;border:2px solid #111;border-radius:10px;z-index:9999;box-shadow:0 6px 0 #111;font-size:14px}.toast.ok{background:#3b6b38}.toast.err{background:#8a3d3d}
+</style>
 </head>
 <body>
 <div class="app">
@@ -1001,6 +1004,141 @@ renderAll();
   hydratePointers().then(() => {
     window.dispatchEvent(new CustomEvent('pflanzenlog-storage-ready'));
   });
+})();
+</script>
+
+
+<script>
+(function(){
+  const APP_KEY = 'pflanzenlog_state';
+  const SNAP_KEY = 'pflanzenlog_snapshot';
+  const DB_NAME = 'pflanzenlog_db';
+  const STORE = 'kv';
+
+  function toast(msg, type='ok'){
+    try {
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type==='err' ? 'err' : 'ok');
+      el.textContent = msg;
+      document.body.appendChild(el);
+      setTimeout(()=>el.remove(), 2400);
+    } catch(e){}
+  }
+
+  async function openDb(){
+    return await new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if(!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idbSet(key, value){
+    const db = await openDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  }
+  async function idbGet(key){
+    const db = await openDb();
+    const val = await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return val;
+  }
+
+  function currentState(){
+    try {
+      if (window.state && typeof window.state === 'object') return window.state;
+    } catch(e){}
+    try {
+      const raw = localStorage.getItem(APP_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch(e){}
+    return null;
+  }
+
+  async function persistDurable(state){
+    const payload = JSON.stringify(state || currentState() || {});
+    localStorage.setItem(APP_KEY, payload);
+    localStorage.setItem(SNAP_KEY, payload);
+    await idbSet(APP_KEY, payload);
+    await idbSet('lastSavedAt', new Date().toISOString());
+    return true;
+  }
+
+  async function recoverDurable(){
+    try {
+      const idbPayload = await idbGet(APP_KEY);
+      if (idbPayload) {
+        localStorage.setItem(APP_KEY, idbPayload);
+        return JSON.parse(idbPayload);
+      }
+    } catch(e){}
+    try {
+      const snap = localStorage.getItem(SNAP_KEY) || localStorage.getItem(APP_KEY);
+      if (snap) return JSON.parse(snap);
+    } catch(e){}
+    return null;
+  }
+
+  window.persistStateDurable = async function(state){
+    try {
+      return await persistDurable(state);
+    } catch (e) {
+      console.error('persistStateDurable failed', e);
+      toast('Fehler beim Speichern', 'err');
+      throw e;
+    }
+  };
+
+  window.recoverDurableState = async function(){
+    return await recoverDurable();
+  };
+
+  window.loadMeta = async function(){
+    return { lastSavedAt: await idbGet('lastSavedAt') || null };
+  };
+
+  window.loadLatestSnapshot = async function(){
+    const raw = await idbGet(APP_KEY) || localStorage.getItem(SNAP_KEY) || localStorage.getItem(APP_KEY);
+    try { return raw ? JSON.parse(raw) : null; } catch(e){ return null; }
+  };
+
+  // Wrap saveState if present to always persist durably and show success toast.
+  const tryWrap = () => {
+    if (window.__saveWrapped) return;
+    if (typeof window.saveState === 'function') {
+      const origSave = window.saveState;
+      window.saveState = async function(){
+        try {
+          const result = await origSave.apply(this, arguments);
+          const st = currentState();
+          if (st) await persistDurable(st);
+          toast('Gespeichert', 'ok');
+          return result;
+        } catch(e) {
+          console.error('saveState wrapper failed', e);
+          toast('Fehler beim Speichern, bitte Backup exportieren', 'err');
+          throw e;
+        }
+      };
+      window.__saveWrapped = true;
+    }
+  };
+  document.addEventListener('DOMContentLoaded', tryWrap);
+  setTimeout(tryWrap, 0);
 })();
 </script>
 
